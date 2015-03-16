@@ -61,19 +61,22 @@
 
 #define RX_FREQ             10125000
 #define TX_FREQ             10140200
+#define CALIBRATE_FREQ       9985000
 //#define TX_FREQ_SHIFT       (BIT_PERIOD_DENOM / BIT_PERIOD_NUMBER)
 #define TX_FREQ_SHIFT       2
-
+#define TX_CORRECTION       -880
 #define ONE_SECOND          1000
 #define NUMBER_OF_MSG_BITS  162
 
 #define WAIT_FOR_TRANSMIT_TIMEOUT   0
 #define WAIT_FOR_TRANSMIT_START     1
 #define WAIT_FOR_TRANSMIT_COMPLETE  2
+#define WAIT_FOR_CALIBRATE_COMPLETE 3
 
 #define POWER_UP            0x00
 #define POWER_DOWN          0x04
 
+#define CALIBRATE           8
 #define VCONTROL            9
 #define LED                 13
 
@@ -153,6 +156,7 @@ volatile unsigned int sample = 0;
 
 uint8   vox_last_sample = VOX_LOW;
 boolean vox_rising_edge = false;
+boolean first_test_time = false;
 
 /* WSPR data
  * KC3XM FM19 10
@@ -212,18 +216,22 @@ void setup()
     /* Initialize transmit variables.
      */
     setupGoertzel();
-    
-    lastTime = millis();
-    transmitState = WAIT_FOR_TRANSMIT_TIMEOUT;
-    transmitAcc = 0;     
-    
+
     /* Initialize the output pins.
      */
     pinMode(VCONTROL, OUTPUT);
     pinMode(LED, OUTPUT);
+    pinMode(CALIBRATE, INPUT_PULLUP); 
     ENABLE_RECEIVE;
     ENABLE_RECEIVE_LED;   
 
+    /* Initialize the transmit state.
+     */    
+    lastTime = millis();
+    transmitState = (digitalRead(CALIBRATE) == LOW) ? 
+        WAIT_FOR_CALIBRATE_COMPLETE : WAIT_FOR_TRANSMIT_TIMEOUT;
+    transmitAcc = 0;     
+    
     /* Initialize the Si5351
      */
     si5351.init(SI5351_CRYSTAL_LOAD_8PF);
@@ -231,7 +239,6 @@ void setup()
     
     /* Enable/disable the clocks.
      */
-    si5351.set_correction(-880);
     si5351.clock_enable(SI5351_CLK0, 0);
     si5351.clock_enable(SI5351_CLK1, 0);
     si5351.clock_enable(SI5351_CLK2, 1);
@@ -291,7 +298,37 @@ void loop()
      * while we may not get exact single bits it will be correct on
      * the average.
      */
-    if (WAIT_FOR_TRANSMIT_TIMEOUT == transmitState)
+    if (WAIT_FOR_CALIBRATE_COMPLETE == transmitState)
+    {
+        /* Trying to calibrate the oscillator.  Check the calibrate
+         * pin level to decide what to do here.
+         */
+        int calibrate = digitalRead(CALIBRATE);
+        if (calibrate == LOW)
+        {
+            /* Still trying to calibrate the oscillator.
+             */
+            if (first_test_time == TRUE)
+            {
+                /* First time in the state so set the correction to 0.
+                 * Set the oscillator to the calibration frequency.
+                 */
+                si5351.set_correction(0);
+                SetFrequency(CALIBRATE_FREQ, POWER_DOWN);
+                first_test_time = false;
+            }
+        }
+        else
+        {
+            /* Level not set so you are no longer trying to 
+             * calibrate the oscillator. Go to the next state.
+             */
+            si5351.set_correction(TX_CORRECTION);
+            SetFrequency(RX_FREQ, POWER_DOWN);             
+            transmitState = WAIT_FOR_TRANSMIT_TIMEOUT;
+        }
+    }   
+    else if (WAIT_FOR_TRANSMIT_TIMEOUT == transmitState)
     {
         /* If the vox indicates a tone is being transmitted set up the
          * delay before transmission.
