@@ -107,9 +107,11 @@ uint8 bitIndex = 0;
 
 /* Variable declarations.
  *
- * N is the number of audio samples to be processed.
- * decimation is the sample decimation rate.
- * k is the frequency band of interest.
+ * N = number of audio samples to be processed.
+ * decimation = sample decimation rate.
+ * N * decimation = number of samples taken from the ADC.
+ *
+ * k = frequency band of interest.
  * bandwidth = sampling frequency / (N * decimation) 
  * band center frequency = k * bandwidth
  *
@@ -118,8 +120,6 @@ uint8 bitIndex = 0;
  */
 const float sampling_freq = 38462.0;
 const int decimation = 8;
-
-const float target_freq = 777.0;
 const int N = 25;
 
 /* Define various ADC prescaler
@@ -552,6 +552,7 @@ void startADCSamples()
  */
 void setupGoertzel()
 {
+    const float target_freq = 777.0;
     int k = (int)(.5 + (decimation * N * target_freq) / sampling_freq);
     float w = 2.0 * PI * (float)k / (float)N;
     
@@ -575,7 +576,7 @@ void doGoertzel()
      */
     Q1 = 0;
     Q2 = 0;
-    for (int i = 0, index = 7; i < N; i++, index += decimation) 
+    for (int i = 0, index = decimation - 1; i < N; i++, index += decimation) 
     {
         Q0 = coeff * Q1 - Q2 + testData[index];
         Q2 = Q1;
