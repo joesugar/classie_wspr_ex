@@ -555,14 +555,14 @@ void setupGoertzel()
     //float target_freq = 777.0;
     float subsample_freq = sampling_freq / decimation;
     float tone_freq = abs(BAND_CENTER - RX_FREQ);
-    int subsample_mult = (int)(tone_freq / subsample_freq);
+    float subsample_mult = (int)(tone_freq / subsample_freq);
     float target_freq = tone_freq - subsample_mult * subsample_freq;
     if (target_freq > subsample_freq / 2.0)
     {
         target_freq = subsample_freq - target_freq;
     }
     
-    int k = (int)(.5 + (decimation * N * target_freq) / sampling_freq);
+    int k = (int)(.5 + decimation * N * (target_freq / sampling_freq));
     float w = 2.0 * PI * (float)k / (float)N;
     
     cosine = cos(w);
